@@ -1,54 +1,48 @@
 {-# LANGUAGE OverloadedStrings #-}
+import           Control.Monad    ((>=>))
+import           Data.Bits
+import qualified Data.ByteString  as B
+import           Data.Char        (ord)
+import           Data.List        (elemIndex)
+import qualified Data.Map.Strict  as M
+import           Data.Monoid      (mempty, (<>))
+import qualified Data.Text        as T
+import           Data.Word        (Word8)
 import           Test.Tasty
 import           Test.Tasty.HUnit
-
-import Control.Monad ((>=>))
-import qualified Data.Text as T
-import qualified Data.ByteString as B
-import qualified Data.Map.Strict as M
-import Data.Bits
-
-import Data.Char (ord)
-import Data.List (elemIndex)
-import Data.Monoid ((<>), mempty)
-
-import Data.Word (Word8)
 
 newtype Base64 = Base64 T.Text deriving (Show, Eq)
 newtype HexBytes = HexBytes T.Text deriving (Show, Eq)
 
-chunksOf :: Int -> [a] -> [[a]]
-chunksOf _ [] = []
-chunksOf n l
-  | n > 0 = take n l : chunksOf n (drop n l)
-  | otherwise = error "Negative n"
-
-hexmap = M.fromList $ zip (['0'..'9'] <> ['a' .. 'f']) [0..]
-
-hexchar2int x = M.lookup x hexmap
-
 hex2bytes :: HexBytes -> Maybe B.ByteString
 hex2bytes = hex2bytes' mempty
+  where
+    hexmap = M.fromList $ zip (['0'..'9'] <> ['a' .. 'f']) [0..]
+    hexchar2int x = M.lookup x hexmap
 
-hex2bytes' :: [Word8] -> HexBytes -> Maybe B.ByteString
-hex2bytes' accum (HexBytes cs)
-  | T.length cs == 0 = Just . B.pack . reverse $ accum
-  | otherwise =
-    case mbByte of
-      Just (byte, rest) -> hex2bytes' (byte:accum) (HexBytes rest)
-      Nothing           -> Nothing
+    hex2bytes' :: [Word8] -> HexBytes -> Maybe B.ByteString
+    hex2bytes' accum (HexBytes cs)
+      | T.length cs == 0 = Just . B.pack . reverse $ accum
+      | otherwise = do
+          (msb, rest) <- T.uncons cs
+          (lsb, rest) <- T.uncons rest
+          msb <- hexchar2int msb
+          lsb <- hexchar2int lsb
 
-    where
-      mbByte = do
-        (msb, rest) <- T.uncons cs
-        (lsb, rest) <- T.uncons rest
-        msb <- hexchar2int msb
-        lsb <- hexchar2int lsb
+          let byte = fromIntegral $ msb * 16 + lsb
 
-        return (fromIntegral $ msb * 16 + lsb, rest)
+          hex2bytes' (byte:accum) (HexBytes rest)
 
-base64map = M.fromList $
-  zip [0..] (['A'..'Z'] <> ['a' .. 'z'] <> ['0'..'9'] <> ['+', '/'])
+packBytes :: [Word8] -> Int
+packBytes bs =
+  foldl (\x (b, i) -> x .|. fromIntegral b `shift` (8 * i)) 0 $
+  zip bs (reverse [0 .. length bs - 1])
+
+unpackBits :: Int -> Int -> Int -> [Int]
+unpackBits n s x =
+  map (\i -> (x .&. mask `shift` (i * s)) `shiftR` (i * s)) $ reverse [0..n-1]
+  where
+    mask = 2 ^ s - 1
 
 bytes2base64 :: B.ByteString -> Maybe Base64
 bytes2base64 bs =
@@ -60,17 +54,19 @@ bytes2base64 bs =
   Base64 . T.concat <$> sequence encoded
 
   where
+    chunksOf :: Int -> [a] -> [[a]]
+    chunksOf _ [] = []
+    chunksOf n l
+      | n > 0 = take n l : chunksOf n (drop n l)
+      | otherwise = error "Negative n"
+
+    base64map = M.fromList $
+      zip [0..] (['A'..'Z'] <> ['a' .. 'z'] <> ['0'..'9'] <> ['+', '/'])
+
     encodeChar :: Int -> Maybe Char
     encodeChar n = M.lookup n base64map
 
-    encodeChunk [a, b, c] =
-      let n = fromIntegral a `shift` 16 .|. fromIntegral b `shift` 8 .|. fromIntegral c in
-      let b1 = (n .&. (63 `shift` 18)) `shiftR` 18 in
-      let b2 = (n .&. (63 `shift` 12)) `shiftR` 12 in
-      let b3 = (n .&. (63 `shift` 6)) `shiftR` 6 in
-      let b4 = (n .&. (63 `shift` 0)) `shiftR` 0 in
-
-      T.pack <$> sequence [encodeChar b1, encodeChar b2, encodeChar b3, encodeChar b4]
+    encodeChunk = fmap T.pack . mapM encodeChar . unpackBits 4 6 . packBytes
 
 hex2base64 :: HexBytes -> Maybe Base64
 hex2base64 = hex2bytes >=> bytes2base64
