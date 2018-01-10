@@ -1,14 +1,13 @@
 name:                crytopals-solutions
 version:             0.1.0.0
-github:              "githubuser/crytopals-solutions"
+github:              "xaviershay/crytopals-solutions"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2018 Author name here"
+author:              "Xavier Shay"
+maintainer:          "contact@xaviershay.com"
+copyright:           "2018 Xavier Shay"
 
 extra-source-files:
 - README.md
-- ChangeLog.md
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -46,3 +45,9 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - crytopals-solutions
+    - tasty
+    - tasty-hunit
+    - tasty-quickcheck
+    - text
+    - bytestring
+    - containers
