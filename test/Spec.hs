@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 import           Control.Monad    ((>=>))
 import           Data.Bits
 import qualified Data.ByteString  as B
 import           Data.Char        (ord)
+import           Data.Foldable    (foldl')
 import           Data.List        (elemIndex)
 import qualified Data.Map.Strict  as M
 import           Data.Monoid      (mempty, (<>))
@@ -33,16 +35,21 @@ hex2bytes = hex2bytes' mempty
 
           hex2bytes' (byte:accum) (HexBytes rest)
 
-packBytes :: [Word8] -> Int
-packBytes bs =
-  foldl (\x (b, i) -> x .|. fromIntegral b `shift` (8 * i)) 0 $
+packWords :: (Integral a, Bits b, Num b) => [a] -> b
+packWords bs =
+  foldl' (\x (b, i) -> x .|. fromIntegral b `shift` (8 * i)) 0 $
   zip bs (reverse [0 .. length bs - 1])
 
-unpackBits :: Int -> Int -> Int -> [Int]
-unpackBits n s x =
-  map (\i -> (x .&. mask `shift` (i * s)) `shiftR` (i * s)) $ reverse [0..n-1]
+unpackWords :: (Bits a, Num a) => Int -> Int -> a -> [a]
+unpackWords numberOfWords bitsPerWord packed =
+  f <$> reverse [0..numberOfWords-1]
+
   where
-    mask = 2 ^ s - 1
+    f i =
+      let mask = 2 ^ bitsPerWord - 1 in
+      let pos = i * bitsPerWord in
+
+      (packed .&. mask `shift` pos) `shiftR` pos
 
 bytes2base64 :: B.ByteString -> Maybe Base64
 bytes2base64 bs =
@@ -66,7 +73,7 @@ bytes2base64 bs =
     encodeChar :: Int -> Maybe Char
     encodeChar n = M.lookup n base64map
 
-    encodeChunk = fmap T.pack . mapM encodeChar . unpackBits 4 6 . packBytes
+    encodeChunk = fmap T.pack . mapM encodeChar . unpackWords 4 6 . packWords
 
 hex2base64 :: HexBytes -> Maybe Base64
 hex2base64 = hex2bytes >=> bytes2base64
