@@ -7,6 +7,7 @@ import           Data.Char        (ord)
 import           Data.Foldable    (foldl')
 import           Data.List        (elemIndex)
 import qualified Data.Map.Strict  as M
+import           Data.Maybe       (fromJust)
 import           Data.Monoid      (mempty, (<>))
 import qualified Data.Text        as T
 import           Data.Word        (Word8)
@@ -78,6 +79,12 @@ bytes2base64 bs =
 hex2base64 :: HexBytes -> Maybe Base64
 hex2base64 = hex2bytes >=> bytes2base64
 
+xorBytes :: B.ByteString -> B.ByteString -> B.ByteString
+xorBytes xs ys = B.pack $ B.zipWith xor xs ys
+
+fromHexString :: T.Text -> B.ByteString
+fromHexString = fromJust . hex2bytes . HexBytes
+
 main :: IO ()
 main = defaultMain $ testGroup "Set 1"
   [ testGroup "Problem 1"
@@ -93,5 +100,11 @@ main = defaultMain $ testGroup "Set 1"
       hex2base64
         (HexBytes $ "49276d206b696c6c696e6720796f757220627261696e2" <>
                     "06c696b65206120706f69736f6e6f7573206d757368726f6f6d")
+    ]
+  , testGroup "Problem 2"
+    [ testCase "given" $
+      fromHexString "746865206b696420646f6e277420706c6179" @=?
+        fromHexString "1c0111001f010100061a024b53535009181c" `xorBytes`
+        fromHexString "686974207468652062756c6c277320657965"
     ]
   ]
