@@ -31,13 +31,13 @@ hex2bytes = hex2bytes' mempty
           msb <- hexchar2int msb
           lsb <- hexchar2int lsb
 
-          let byte = fromIntegral $ msb * 16 + lsb
+          let byte = packWords 4 [msb, lsb]
 
           hex2bytes' (byte:accum) (HexBytes rest)
 
-packWords :: (Integral a, Bits b, Num b) => [a] -> b
-packWords bs =
-  foldl' (\x (b, i) -> x .|. fromIntegral b `shift` (8 * i)) 0 $
+packWords :: (Integral a, Bits b, Num b) => Int -> [a] -> b
+packWords bitsPerWord bs =
+  foldl' (\x (b, i) -> x .|. fromIntegral b `shift` (bitsPerWord * i)) 0 $
   zip bs (reverse [0 .. length bs - 1])
 
 unpackWords :: (Bits a, Num a) => Int -> Int -> a -> [a]
@@ -73,7 +73,7 @@ bytes2base64 bs =
     encodeChar :: Int -> Maybe Char
     encodeChar n = M.lookup n base64map
 
-    encodeChunk = fmap T.pack . mapM encodeChar . unpackWords 4 6 . packWords
+    encodeChunk = fmap T.pack . mapM encodeChar . unpackWords 4 6 . packWords 8
 
 hex2base64 :: HexBytes -> Maybe Base64
 hex2base64 = hex2bytes >=> bytes2base64
