@@ -87,7 +87,7 @@ fromHexString = fromJust . hex2bytes . HexBytes
 
 main :: IO ()
 main = defaultMain $ testGroup "Set 1"
-  [ testGroup "Problem 1"
+  [ testGroup "Challenge 1"
     [ testCase "simple hex2bytes" $
       (Just . B.pack $ [0, 255]) @=? hex2bytes (HexBytes "00ff")
     , testCase "simple bytes2base64" $
@@ -101,7 +101,7 @@ main = defaultMain $ testGroup "Set 1"
         (HexBytes $ "49276d206b696c6c696e6720796f757220627261696e2" <>
                     "06c696b65206120706f69736f6e6f7573206d757368726f6f6d")
     ]
-  , testGroup "Problem 2"
+  , testGroup "Challenge 2"
     [ testCase "given" $
       fromHexString "746865206b696420646f6e277420706c6179" @=?
         fromHexString "1c0111001f010100061a024b53535009181c" `xorBytes`
