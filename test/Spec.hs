@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import           Control.Monad    ((>=>))
+import           Control.Monad      ((>=>))
 import           Data.Bits
-import qualified Data.ByteString  as B
-import           Data.Char        (ord)
-import           Data.Foldable    (foldl')
-import           Data.List        (elemIndex)
-import qualified Data.Map.Strict  as M
-import           Data.Maybe       (fromJust)
-import           Data.Monoid      (mempty, (<>))
-import qualified Data.Text        as T
-import           Data.Word        (Word8)
+import qualified Data.ByteString    as B
+import           Data.Char          (ord)
+import           Data.Foldable      (foldl')
+import           Data.List          (elemIndex, sortOn)
+import qualified Data.Map.Strict    as M
+import           Data.Maybe         (fromJust)
+import           Data.Monoid        (mempty, (<>))
+import qualified Data.Text          as T
+import           Data.Text.Encoding (decodeUtf8')
+import           Data.Word          (Word8)
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
@@ -85,6 +86,32 @@ xorBytes xs ys = B.pack $ B.zipWith xor xs ys
 fromHexString :: T.Text -> B.ByteString
 fromHexString = fromJust . hex2bytes . HexBytes
 
+toMaybe :: Either a b -> Maybe b
+toMaybe x = case x of
+  Right x -> Just x
+  Left _  -> Nothing
+
+-- The input cypher is known to xor'ed with a single character. Try decoding
+-- against all characters, using a simple heuristic to determine which output
+-- looks most "english like".
+set1challenge3 :: B.ByteString -> Maybe T.Text
+set1challenge3 bs =
+  let candidateKeys = [B.pack $ replicate (B.length bs) c | c <- [0..255]] in
+  let candidateTexts = map (xorBytes bs) candidateKeys in
+
+  -- head is safe here because it is operating on the list constructed with a
+  -- constant range above
+  toMaybe . decodeUtf8' . head . sortOn (negate . score) $ candidateTexts
+
+  where
+    -- The score is the number of simple characters in the string.
+    score :: B.ByteString -> Int
+    score = B.foldl' (\a b -> a + (scoreChar . fromIntegral $ b)) 0
+    scoreChar b = M.findWithDefault 0 b scoreMap
+    scoreMap = M.fromList $ zip
+      (map ord $ ['a'..'z'] <> ['A'..'Z'] <> [' '])
+      (repeat 1)
+
 main :: IO ()
 main = defaultMain $ testGroup "Set 1"
   [ testGroup "Challenge 1"
@@ -106,5 +133,11 @@ main = defaultMain $ testGroup "Set 1"
       fromHexString "746865206b696420646f6e277420706c6179" @=?
         fromHexString "1c0111001f010100061a024b53535009181c" `xorBytes`
         fromHexString "686974207468652062756c6c277320657965"
+    ]
+  , testGroup "Challenge 3"
+    [ testCase "given" $
+      Just "Cooking MC's like a pound of bacon" @=? set1challenge3
+        (fromHexString $ "1b37373331363f78151b7f2b783431333d7839782" <>
+                         "8372d363c78373e783a393b3736")
     ]
   ]
