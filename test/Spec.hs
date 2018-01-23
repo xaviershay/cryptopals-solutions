@@ -7,7 +7,7 @@ import           Data.Char          (ord)
 import           Data.Foldable      (foldl')
 import           Data.List          (elemIndex, sortOn)
 import qualified Data.Map.Strict    as M
-import           Data.Maybe         (fromJust)
+import           Data.Maybe         (fromJust, catMaybes)
 import           Data.Monoid        (mempty, (<>))
 import qualified Data.Text          as T
 import           Data.Text.Encoding (decodeUtf8')
@@ -91,53 +91,89 @@ toMaybe x = case x of
   Right x -> Just x
   Left _  -> Nothing
 
+
+-- A heuristic to detect the "english-ness" of some bytes. The higher the
+-- return value, the more likely.
+score :: B.ByteString -> Int
+score = B.foldl' (\a b -> a + (scoreChar . fromIntegral $ b)) 0
+scoreChar b = M.findWithDefault 0 b scoreMap
+scoreMap = M.fromList $ zip
+  (map ord $ ['a'..'z'] <> ['A'..'Z'] <> [' '])
+  (repeat 1)
+
+-- Given a byte string, return all possible single-char repeating keys
+generateSingleCharKeys :: B.ByteString -> [B.ByteString]
+generateSingleCharKeys bs =
+  [B.pack $ replicate (B.length bs) c | c <- [0..255]]
+
+-- Given possible UTF8 bytes, return the one that is actually UTF8 and most
+-- likely to be valid english. This is a simple heuristic method, so could be
+-- wrong! Returns nothing if no input is valid UTF8.
+chooseMostLikelyText :: [B.ByteString] -> Maybe T.Text
+chooseMostLikelyText bs =
+  let sorted = sortOn (negate . score) bs in
+
+  case sorted of
+    []     -> Nothing
+    (x:_) -> toMaybe . decodeUtf8' $ x
+
 -- The input cypher is known to xor'ed with a single character. Try decoding
 -- against all characters, using a simple heuristic to determine which output
 -- looks most "english like".
 set1challenge3 :: B.ByteString -> Maybe T.Text
 set1challenge3 bs =
-  let candidateKeys = [B.pack $ replicate (B.length bs) c | c <- [0..255]] in
+  let candidateKeys  = generateSingleCharKeys bs in
   let candidateTexts = map (xorBytes bs) candidateKeys in
 
   -- head is safe here because it is operating on the list constructed with a
   -- constant range above
-  toMaybe . decodeUtf8' . head . sortOn (negate . score) $ candidateTexts
+  chooseMostLikelyText candidateTexts
 
-  where
-    -- The score is the number of simple characters in the string.
-    score :: B.ByteString -> Int
-    score = B.foldl' (\a b -> a + (scoreChar . fromIntegral $ b)) 0
-    scoreChar b = M.findWithDefault 0 b scoreMap
-    scoreMap = M.fromList $ zip
-      (map ord $ ['a'..'z'] <> ['A'..'Z'] <> [' '])
-      (repeat 1)
+set1challenge4 :: [String] -> Maybe T.Text
+set1challenge4 ss =
+  let candidateInputs = map (fromHexString . T.pack) ss in
+  let candidateTexts =
+        [ xorBytes x y
+           | x <- candidateInputs
+           , y <- generateSingleCharKeys x
+        ] in
+
+  chooseMostLikelyText candidateTexts
 
 main :: IO ()
-main = defaultMain $ testGroup "Set 1"
-  [ testGroup "Challenge 1"
-    [ testCase "simple hex2bytes" $
-      (Just . B.pack $ [0, 255]) @=? hex2bytes (HexBytes "00ff")
-    , testCase "simple bytes2base64" $
-      Just (Base64 "AAAA") @=? bytes2base64 (B.pack [0])
-    , testCase "invalid hex char"   $ Nothing @=? hex2base64 (HexBytes "ZZ")
-    , testCase "invalid hex length" $ Nothing @=? hex2base64 (HexBytes "F")
-    , testCase "given" $
-      Just (Base64 $ "SSdtIGtpbGxpbmcgeW91ciBicmFpbiB" <>
-                     "saWtlIGEgcG9pc29ub3VzIG11c2hyb29t") @=?
-      hex2base64
-        (HexBytes $ "49276d206b696c6c696e6720796f757220627261696e2" <>
-                    "06c696b65206120706f69736f6e6f7573206d757368726f6f6d")
+main = do
+  set1challenge4data <- lines <$> readFile "data/4.txt"
+
+  defaultMain $ testGroup "Set 1"
+    [ testGroup "Challenge 1"
+      [ testCase "simple hex2bytes" $
+        (Just . B.pack $ [0, 255]) @=? hex2bytes (HexBytes "00ff")
+      , testCase "simple bytes2base64" $
+        Just (Base64 "AAAA") @=? bytes2base64 (B.pack [0])
+      , testCase "invalid hex char"   $ Nothing @=? hex2base64 (HexBytes "ZZ")
+      , testCase "invalid hex length" $ Nothing @=? hex2base64 (HexBytes "F")
+      , testCase "given" $
+        Just (Base64 $ "SSdtIGtpbGxpbmcgeW91ciBicmFpbiB" <>
+                       "saWtlIGEgcG9pc29ub3VzIG11c2hyb29t") @=?
+        hex2base64
+          (HexBytes $ "49276d206b696c6c696e6720796f757220627261696e2" <>
+                      "06c696b65206120706f69736f6e6f7573206d757368726f6f6d")
+      ]
+    , testGroup "Challenge 2"
+      [ testCase "given" $
+        fromHexString "746865206b696420646f6e277420706c6179" @=?
+          fromHexString "1c0111001f010100061a024b53535009181c" `xorBytes`
+          fromHexString "686974207468652062756c6c277320657965"
+      ]
+    , testGroup "Challenge 3"
+      [ testCase "given" $
+        Just "Cooking MC's like a pound of bacon" @=? set1challenge3
+          (fromHexString $ "1b37373331363f78151b7f2b783431333d7839782" <>
+                           "8372d363c78373e783a393b3736")
+      ]
+    , testGroup "Challenge 4"
+      [ testCase "given" $
+        Just "Now that the party is jumping\n" @=?
+          set1challenge4 set1challenge4data
+      ]
     ]
-  , testGroup "Challenge 2"
-    [ testCase "given" $
-      fromHexString "746865206b696420646f6e277420706c6179" @=?
-        fromHexString "1c0111001f010100061a024b53535009181c" `xorBytes`
-        fromHexString "686974207468652062756c6c277320657965"
-    ]
-  , testGroup "Challenge 3"
-    [ testCase "given" $
-      Just "Cooking MC's like a pound of bacon" @=? set1challenge3
-        (fromHexString $ "1b37373331363f78151b7f2b783431333d7839782" <>
-                         "8372d363c78373e783a393b3736")
-    ]
-  ]
