@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import qualified Data.ByteString    as B
+import qualified Data.ByteString.Lazy    as B
 import           Data.Monoid        ((<>))
-import qualified Data.Text          as T
+import qualified Data.Text.Lazy          as T
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -45,6 +45,17 @@ main = do
         Just "Now that the party is jumping\n" @=?
           set1challenge4 set1challenge4data
       ]
+    , testGroup "Challenge 5"
+      [ testCase "given" $
+        (fromHexString $ "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623" <>
+                         "d63343c2a26226324272765272a282b2f20430a652e2c652a" <>
+                         "3124333a653e2b2027630c692b20283165286326302e27282f")
+          @=?
+            xorBytes "ICE"
+              ("Burning 'em, if you ain't quick and nimble\n" <>
+              "I go crazy when I hear a cymbal")
+      ]
+
     ]
 
 -- The input cypher is known to xor'ed with a single character. Try decoding

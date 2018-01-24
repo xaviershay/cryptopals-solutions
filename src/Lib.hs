@@ -1,17 +1,17 @@
 module Lib where
 
-import           Control.Monad      ((>=>))
+import           Control.Monad           ((>=>))
 import           Data.Bits
-import qualified Data.ByteString    as B
-import           Data.Char          (ord)
-import           Data.Foldable      (foldl')
-import           Data.List          (sortOn)
-import qualified Data.Map.Strict    as M
-import           Data.Maybe         (fromJust)
-import           Data.Monoid        (mempty, (<>))
-import qualified Data.Text          as T
-import           Data.Text.Encoding (decodeUtf8')
-import           Data.Word          (Word8)
+import qualified Data.ByteString.Lazy    as B
+import           Data.Char               (ord)
+import           Data.Foldable           (foldl')
+import           Data.List               (sortOn)
+import qualified Data.Map.Strict         as M
+import           Data.Maybe              (fromJust)
+import           Data.Monoid             (mempty, (<>))
+import qualified Data.Text.Lazy          as T
+import           Data.Text.Lazy.Encoding (decodeUtf8')
+import           Data.Word               (Word8)
 
 newtype Base64 = Base64 T.Text deriving (Show, Eq)
 newtype HexBytes = HexBytes T.Text deriving (Show, Eq)
@@ -79,7 +79,10 @@ hex2base64 :: HexBytes -> Maybe Base64
 hex2base64 = hex2bytes >=> bytes2base64
 
 xorBytes :: B.ByteString -> B.ByteString -> B.ByteString
-xorBytes xs ys = B.pack $ B.zipWith xor xs ys
+xorBytes xs ys =
+  let longestLength = max (B.length xs) (B.length ys) in
+
+  B.take longestLength $ B.pack (B.zipWith xor (B.cycle xs) (B.cycle ys))
 
 fromHexString :: T.Text -> B.ByteString
 fromHexString = fromJust . hex2bytes . HexBytes
@@ -101,7 +104,7 @@ scoreMap = M.fromList $ zip
 -- Given a byte string, return all possible single-char repeating keys
 generateSingleCharKeys :: B.ByteString -> [B.ByteString]
 generateSingleCharKeys bs =
-  [B.pack $ replicate (B.length bs) c | c <- [0..255]]
+  [B.replicate (B.length bs) c | c <- [0..255]]
 
 -- Given possible UTF8 bytes, return the one that is actually UTF8 and most
 -- likely to be valid english. This is a simple heuristic method, so could be
