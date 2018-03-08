@@ -12,6 +12,7 @@ import Lib
 main :: IO ()
 main = do
   set1challenge4data <- lines <$> readFile "data/4.txt"
+  set1challenge6data <- concat . lines <$> readFile "data/6.txt"
 
   defaultMain $ testGroup "Set 1"
     [ testGroup "Challenge 1"
@@ -55,6 +56,11 @@ main = do
               ("Burning 'em, if you ain't quick and nimble\n" <>
               "I go crazy when I hear a cymbal")
       ]
+    , testGroup "Challenge 6"
+      [ testCase "given" $
+        Just "XXX\n" @=?
+          set1challenge6 set1challenge6data
+      ]
 
     ]
 
@@ -80,3 +86,7 @@ set1challenge4 ss =
         ] in
 
   chooseMostLikelyText candidateTexts
+
+-- The input cypher is encrypted with repeating key XOR, then base64 encoded.
+set1challenge6 :: String -> Maybe T.Text
+set1challenge6 s = Just "TODO"
