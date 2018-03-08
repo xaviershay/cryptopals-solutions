@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+module Spec where
+
 import qualified Data.ByteString.Lazy    as B
 import           Data.Monoid        ((<>))
 import qualified Data.Text.Lazy          as T
@@ -9,12 +11,12 @@ import           Test.Tasty.HUnit
 
 import Lib
 
-main :: IO ()
-main = do
+test_main :: IO TestTree
+test_main = do
   set1challenge4data <- lines <$> readFile "data/4.txt"
   set1challenge6data <- concat . lines <$> readFile "data/6.txt"
 
-  defaultMain $ testGroup "Set 1"
+  return $ testGroup "Set 1"
     [ testGroup "Challenge 1"
       [ testCase "simple hex2bytes" $
         (Just . B.pack $ [0, 255]) @=? hex2bytes (HexBytes "00ff")

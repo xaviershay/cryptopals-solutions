@@ -43,7 +43,7 @@ library:
 
 tests:
   crytopals-solutions-test:
-    main:                Spec.hs
+    main:                Driver.hs
     source-dirs:         test
     ghc-options:
     - -threaded
@@ -55,6 +55,7 @@ tests:
     - tasty
     - tasty-hunit
     - tasty-quickcheck
+    - tasty-discover
     - text
     - bytestring
     - containers
