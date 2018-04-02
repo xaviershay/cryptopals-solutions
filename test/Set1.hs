@@ -3,11 +3,14 @@
 module Set1 where
 
 import qualified Data.ByteString.Lazy    as B
+import Data.List (sortOn, transpose, genericLength)
+import           Data.Maybe (fromJust, catMaybes)
 import           Data.Monoid        ((<>))
 import qualified Data.Text.Lazy          as T
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
+
 
 import Lib
 
@@ -74,12 +77,77 @@ unit_Set_1_Challenge_5 =
         ("Burning 'em, if you ain't quick and nimble\n" <>
         "I go crazy when I hear a cymbal")
 
+unit_hamming_distance =
+  37 @=? hammingDistance "this is a test" "wokka wokka!!!"
+
+focus = unit_Set_1_Challenge_6
+
 unit_Set_1_Challenge_6 = do
   cipherText <- concat . lines <$> readFile "data/6.txt"
 
-  Just "XXX\n" @=? f cipherText
+  Just "Terminator X: Bring the noise" @=?
+    solveKey (Base64 . T.pack $ cipherText)
 
   where
-    -- The input cypher is encrypted with repeating key XOR, then base64 encoded.
-    f :: String -> Maybe T.Text
-    f s = Just "TODO"
+    -- The input cypher is encrypted with repeating key XOR, then base64
+    -- encoded.
+    solveKey :: Base64 -> Maybe B.ByteString
+    solveKey s =
+      -- This is an arbitrary range. In theory the key could be any length, but
+      -- if it's too long there won't be enough information for each byte of
+      -- the key for this method of analysis to work.
+      let possibleKeySizes = [2..40] in
+
+      -- Limit analysis to 3 most promising candidates to reduce time spent. A
+      -- perhaps better approach would be to define a score "threshold" and
+      -- take the first text that exceeds it.
+      let scoredKeySizes = take 3 . sortOn scoreKeySize $ possibleKeySizes in
+
+      let possibleKeys = catMaybes . map bestKeyForKeySize $ scoredKeySizes in
+
+      -- Zip together keys and texts so that we can use either for our return
+      -- value.
+      let possibleTexts = zip possibleKeys $
+                          map (xorBytes bytes) possibleKeys in
+
+      case sortOn (negate . score . snd) possibleTexts of
+        [] -> Nothing
+        ((k, _):_) -> Just k
+
+      where
+        bytes = fromJust . base642bytes $ s
+
+        -- Take the first arbitrary handful of blocks for the given keysize,
+        -- and calculate how close they are. Smaller distance means more likely
+        -- that this is the correct key size.
+        scoreKeySize :: Int -> Double
+        scoreKeySize n =
+          let n64 = fromIntegral n in
+          let blocks = map (\i -> B.take n64 . B.drop (n64 * i) $ bytes) [0..3] in
+          let distances = map (fromIntegral . uncurry hammingDistance) $
+                          zip blocks (tail blocks) in
+
+          sum distances / genericLength distances / (fromIntegral n)
+
+        -- Given a key size, for each potential character in that key extract
+        -- the bytes that would have been encoded with it and test them against
+        -- every possible key. The one with the highest score heuristic is
+        -- selected as the best. In theory, the nth best could also be valid,
+        -- but we ignore that case here.
+        bestKeyForKeySize :: Int -> Maybe B.ByteString
+        bestKeyForKeySize keysize =
+          let blocks = map B.pack . transpose $ chunksOf keysize (B.unpack bytes) in
+          let keys = map chooseMostLikelyKey blocks in
+
+          case sequence keys of
+            Nothing -> Nothing
+            Just x -> Just $ B.pack (map B.head x)
+
+        chooseMostLikelyKey :: B.ByteString -> Maybe B.ByteString
+        chooseMostLikelyKey bs =
+          let candidateKeys = generateSingleCharKeys bs in
+          let candidates = sortOn (negate . score . xorBytes bs) candidateKeys in
+
+          case candidates of
+            [] -> Nothing
+            (x:_) -> Just x

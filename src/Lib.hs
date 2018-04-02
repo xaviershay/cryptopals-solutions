@@ -11,7 +11,7 @@ import           Data.Maybe              (fromJust)
 import           Data.Monoid             (mempty, (<>))
 import qualified Data.Text.Lazy          as T
 import           Data.Text.Lazy.Encoding (decodeUtf8')
-import           Data.Word               (Word8)
+import qualified Data.Tuple              as Tuple
 
 newtype Base64 = Base64 T.Text deriving (Show, Eq)
 newtype HexBytes = HexBytes T.Text deriving (Show, Eq)
@@ -22,9 +22,9 @@ hex2bytes = hex2bytes' mempty
     hexmap = M.fromList $ zip (['0'..'9'] <> ['a' .. 'f']) [0..]
     hexchar2int x = M.lookup x hexmap
 
-    hex2bytes' :: [Word8] -> HexBytes -> Maybe B.ByteString
+    hex2bytes' :: [Int] -> HexBytes -> Maybe B.ByteString
     hex2bytes' accum (HexBytes cs)
-      | T.length cs == 0 = Just . B.pack . reverse $ accum
+      | T.length cs == 0 = Just . B.pack . map fromIntegral . reverse $ accum
       | otherwise = do
           (msb, rest) <- T.uncons cs
           (lsb, rest) <- T.uncons rest
@@ -35,12 +35,12 @@ hex2bytes = hex2bytes' mempty
 
           hex2bytes' (byte:accum) (HexBytes rest)
 
-packWords :: (Integral a, Bits b, Num b) => Int -> [a] -> b
+packWords :: Int -> [Int] -> Int
 packWords bitsPerWord bs =
   foldl' (\x (b, i) -> x .|. fromIntegral b `shift` (bitsPerWord * i)) 0 $
   zip bs (reverse [0 .. length bs - 1])
 
-unpackWords :: (Bits a, Num a) => Int -> Int -> a -> [a]
+unpackWords :: Int -> Int -> Int -> [Int]
 unpackWords numberOfWords bitsPerWord packed =
   f <$> reverse [0..numberOfWords-1]
 
@@ -51,24 +51,61 @@ unpackWords numberOfWords bitsPerWord packed =
 
       (packed .&. mask `shift` pos) `shiftR` pos
 
+base642bytes :: Base64 -> Maybe B.ByteString
+base642bytes (Base64 chars) = do
+  --traceM (show (chars))
+  --traceM . show $ map decodeChar . T.unpack $ chars
+  decoded <- sequence . map decodeChar . T.unpack $ chars
+
+  let chunks = (chunksOf 4 decoded) :: [[Int]]
+  --traceM . show $ chars
+  --traceM . show $ decoded
+  --traceM . show $ base64rmap
+  let bytes = concatMap packBytes chunks :: [Int]
+
+  --traceM . show . map (printf "%08b" :: Int -> String) $ bytes
+  return . B.pack . map fromIntegral $ bytes
+
+  where
+    decodeChar :: Char -> Maybe Int
+    decodeChar c = M.lookup c base64rmap
+
+    packBytes ::  [Int] -> [Int]
+    packBytes = unpackWords 3 8 . packWords 6
+
+base64map :: M.Map Int Char
+base64map = M.fromList $
+  zip [0..] (['A'..'Z'] <> ['a' .. 'z'] <> ['0'..'9'] <> ['+', '/'])
+
+base64rmap :: M.Map Char Int
+base64rmap = M.insert '=' 0 $ M.fromList . map Tuple.swap . M.toList $ base64map
+
+hammingDistance :: B.ByteString -> B.ByteString -> Int
+hammingDistance a b = sum . map bitDifference $ B.zip a b
+  where
+    bitDifference (x, y) = numberOfSetBits $ xor x y
+
+    -- This implementation may be surprising but try it by hand with a couple
+    -- of inputs to see how it works. It's neat!
+    numberOfSetBits 0 = 0
+    numberOfSetBits z = 1 + numberOfSetBits (z .&. (z - 1))
+
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf n l
+  | n > 0 = take n l : chunksOf n (drop n l)
+  | otherwise = error "Negative n"
+
 bytes2base64 :: B.ByteString -> Maybe Base64
 bytes2base64 bs =
   let padded = B.unpack $ bs <> B.replicate (abs $ B.length bs `mod` (-3)) 0 in
   let chunked = chunksOf 3 padded in
 
-  let encoded = map encodeChunk chunked in
+  let encoded = map (encodeChunk . map fromIntegral) chunked in
 
   Base64 . T.concat <$> sequence encoded
 
   where
-    chunksOf :: Int -> [a] -> [[a]]
-    chunksOf _ [] = []
-    chunksOf n l
-      | n > 0 = take n l : chunksOf n (drop n l)
-      | otherwise = error "Negative n"
-
-    base64map = M.fromList $
-      zip [0..] (['A'..'Z'] <> ['a' .. 'z'] <> ['0'..'9'] <> ['+', '/'])
 
     encodeChar :: Int -> Maybe Char
     encodeChar n = M.lookup n base64map
