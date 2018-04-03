@@ -1,11 +1,10 @@
 module Lib where
 
-import           Control.Monad           ((>=>))
+import           Control.Monad           ((>=>), join, mapM)
 import           Data.Bits
 import qualified Data.ByteString.Lazy    as B
 import           Data.Char               (ord)
 import           Data.Foldable           (foldl')
-import           Data.List               (sortOn)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (fromJust)
 import           Data.Monoid             (mempty, (<>))
@@ -55,9 +54,9 @@ base642bytes :: Base64 -> Maybe B.ByteString
 base642bytes (Base64 chars) = do
   --traceM (show (chars))
   --traceM . show $ map decodeChar . T.unpack $ chars
-  decoded <- sequence . map decodeChar . T.unpack $ chars
+  decoded <- mapM decodeChar . T.unpack $ chars
 
-  let chunks = (chunksOf 4 decoded) :: [[Int]]
+  let chunks = chunksOf 4 decoded :: [[Int]]
   --traceM . show $ chars
   --traceM . show $ decoded
   --traceM . show $ base64rmap
@@ -124,15 +123,14 @@ xorBytes xs ys =
 fromHexString :: T.Text -> B.ByteString
 fromHexString = fromJust . hex2bytes . HexBytes
 
-toMaybe :: Either a b -> Maybe b
-toMaybe x = case x of
-  Right x -> Just x
-  Left _  -> Nothing
-
 -- A heuristic to detect the "english-ness" of some bytes. The higher the
--- return value, the more likely.
-score :: B.ByteString -> Int
-score = B.foldl' (\a b -> a + (scoreChar . fromIntegral $ b)) 0
+-- return value, the more likely. Normalized by length of input.
+score :: B.ByteString -> Double
+score bytes =
+  B.foldl' (\a b -> a + (scoreChar . fromIntegral $ b)) 0 bytes
+  `realDiv`
+  B.length bytes
+
 scoreChar b = M.findWithDefault 0 b scoreMap
 scoreMap = M.fromList $ zip
   (map ord $ ['a'..'z'] <> ['A'..'Z'] <> [' '])
@@ -140,16 +138,31 @@ scoreMap = M.fromList $ zip
 
 -- Given a byte string, return all possible single-char repeating keys
 generateSingleCharKeys :: B.ByteString -> [B.ByteString]
-generateSingleCharKeys bs =
-  [B.replicate (B.length bs) c | c <- [0..255]]
+generateSingleCharKeys bs = [B.replicate (B.length bs) c | c <- [0..255]]
 
 -- Given possible UTF8 bytes, return the one that is actually UTF8 and most
 -- likely to be valid english. This is a simple heuristic method, so could be
 -- wrong! Returns nothing if no input is valid UTF8.
 chooseMostLikelyText :: [B.ByteString] -> Maybe T.Text
-chooseMostLikelyText bs =
-  let sorted = sortOn (negate . score) bs in
+chooseMostLikelyText =
+  -- Decoding UTF8 can potentially fail, so we end up with a nested Maybe,
+  -- which the join removes.
+  join . fmap (toMaybe . decodeUtf8') .
 
-  case sorted of
-    []     -> Nothing
-    (x:_) -> toMaybe . decodeUtf8' $ x
+  -- Use the first text that scores higher than an arbitrary threshold.
+  headMaybe . filter (\x -> score x >= 0.9)
+
+-- Generic downcasting of Either to Maybe
+toMaybe :: Either a b -> Maybe b
+toMaybe x = case x of
+  Right x -> Just x
+  Left _  -> Nothing
+
+headMaybe :: [a] -> Maybe a
+headMaybe [] = Nothing
+headMaybe (x:_) = Just x
+
+-- Allows us to freely divide integers and doubles without needing to worry
+-- about resulting types or integer truncation.
+realDiv :: (Real a, Real b, Fractional c) => a -> b -> c
+realDiv x y = realToFrac x / realToFrac y

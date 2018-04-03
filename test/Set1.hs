@@ -2,17 +2,18 @@
 
 module Set1 where
 
-import qualified Data.ByteString.Lazy    as B
-import Data.List (sortOn, transpose, genericLength)
-import           Data.Maybe (fromJust, catMaybes)
-import           Data.Monoid        ((<>))
-import qualified Data.Text.Lazy          as T
+import qualified Data.ByteString.Lazy as B
+import           Data.List            (genericLength, sortOn, transpose)
+import           Data.Maybe           (catMaybes, fromJust, mapMaybe)
+import           Data.Monoid          ((<>))
+import qualified Data.Text.Lazy       as T
 
-import           Test.Tasty
-import           Test.Tasty.HUnit
-
+import Test.Tasty
+import Test.Tasty.HUnit
 
 import Lib
+
+focus = unit_Set_1_Challenge_4
 
 test_Set_1_Challenge_1 = testGroup "Challenge 1"
   [ testCase "simple hex2bytes" $
@@ -39,9 +40,9 @@ unit_Set_1_Challenge_3 = Just "Cooking MC's like a pound of bacon" @=? f
                        "8372d363c78373e783a393b3736")
 
   where
-    -- The input cypher is known to xor'ed with a single character. Try decoding
-    -- against all characters, using a simple heuristic to determine which output
-    -- looks most "english like".
+    -- The input cypher is known to xor'ed with a single character. Try
+    -- decoding against all characters, using a simple heuristic to determine
+    -- which output looks most "english like".
     f :: B.ByteString -> Maybe T.Text
     f bs =
       let candidateKeys  = generateSingleCharKeys bs in
@@ -77,10 +78,8 @@ unit_Set_1_Challenge_5 =
         ("Burning 'em, if you ain't quick and nimble\n" <>
         "I go crazy when I hear a cymbal")
 
-unit_hamming_distance =
+unit_Hamming_Distance =
   37 @=? hammingDistance "this is a test" "wokka wokka!!!"
-
-focus = unit_Set_1_Challenge_6
 
 unit_Set_1_Challenge_6 = do
   cipherText <- concat . lines <$> readFile "data/6.txt"
@@ -97,22 +96,20 @@ unit_Set_1_Challenge_6 = do
       -- if it's too long there won't be enough information for each byte of
       -- the key for this method of analysis to work.
       let possibleKeySizes = [2..40] in
-
-      -- Limit analysis to 3 most promising candidates to reduce time spent. A
-      -- perhaps better approach would be to define a score "threshold" and
-      -- take the first text that exceeds it.
-      let scoredKeySizes = take 3 . sortOn scoreKeySize $ possibleKeySizes in
-
-      let possibleKeys = catMaybes . map bestKeyForKeySize $ scoredKeySizes in
+      let scoredKeySizes = sortOn scoreKeySize possibleKeySizes in
+      let possibleKeys = mapMaybe bestKeyForKeySize scoredKeySizes in
 
       -- Zip together keys and texts so that we can use either for our return
       -- value.
-      let possibleTexts = zip possibleKeys $
-                          map (xorBytes bytes) possibleKeys in
+      let possibleTexts = zip
+                            possibleKeys $
+                            map (xorBytes bytes) possibleKeys in
 
-      case sortOn (negate . score . snd) possibleTexts of
-        [] -> Nothing
-        ((k, _):_) -> Just k
+      -- Return the key of the first candidate text that scores above an
+      -- arbitrary threshold.
+      fmap fst . headMaybe .
+      filter (\(_, text) -> score text >= 0.9) $
+      possibleTexts
 
       where
         bytes = fromJust . base642bytes $ s
@@ -122,12 +119,14 @@ unit_Set_1_Challenge_6 = do
         -- that this is the correct key size.
         scoreKeySize :: Int -> Double
         scoreKeySize n =
-          let n64 = fromIntegral n in
-          let blocks = map (\i -> B.take n64 . B.drop (n64 * i) $ bytes) [0..3] in
+          let blocks = map (extractBlock n) [0..3] in
           let distances = map (fromIntegral . uncurry hammingDistance) $
                           zip blocks (tail blocks) in
 
-          sum distances / genericLength distances / (fromIntegral n)
+          sum distances `realDiv` length distances `realDiv` n
+
+        extractBlock n i = let n64 = fromIntegral n in
+          B.take n64 . B.drop (n64 * i) $ bytes
 
         -- Given a key size, for each potential character in that key extract
         -- the bytes that would have been encoded with it and test them against
@@ -136,18 +135,15 @@ unit_Set_1_Challenge_6 = do
         -- but we ignore that case here.
         bestKeyForKeySize :: Int -> Maybe B.ByteString
         bestKeyForKeySize keysize =
-          let blocks = map B.pack . transpose $ chunksOf keysize (B.unpack bytes) in
+          let blocks = map B.pack . transpose . chunksOf keysize . B.unpack $
+                       bytes in
           let keys = map chooseMostLikelyKey blocks in
 
-          case sequence keys of
-            Nothing -> Nothing
-            Just x -> Just $ B.pack (map B.head x)
+          fmap (B.pack . map B.head) . sequence $ keys
 
         chooseMostLikelyKey :: B.ByteString -> Maybe B.ByteString
         chooseMostLikelyKey bs =
-          let candidateKeys = generateSingleCharKeys bs in
-          let candidates = sortOn (negate . score . xorBytes bs) candidateKeys in
-
-          case candidates of
-            [] -> Nothing
-            (x:_) -> Just x
+          headMaybe .
+          sortOn (negate . score . xorBytes bs) .
+          generateSingleCharKeys $
+          bs
