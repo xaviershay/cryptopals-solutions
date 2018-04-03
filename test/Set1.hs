@@ -3,8 +3,8 @@
 module Set1 where
 
 import qualified Data.ByteString.Lazy as B
-import           Data.List            (genericLength, sortOn, transpose)
-import           Data.Maybe           (catMaybes, fromJust, mapMaybe)
+import           Data.List            (sortOn, transpose)
+import           Data.Maybe           (fromJust, mapMaybe)
 import           Data.Monoid          ((<>))
 import qualified Data.Text.Lazy       as T
 
@@ -15,7 +15,7 @@ import Lib
 
 focus = unit_Set_1_Challenge_4
 
-test_Set_1_Challenge_1 = testGroup "Challenge 1"
+test_Set_1_Challenge_1 = testGroup "Set 1 Challenge 1"
   [ testCase "simple hex2bytes" $
     (Just . B.pack $ [0, 255]) @=? hex2bytes (HexBytes "00ff")
   , testCase "simple bytes2base64" $
@@ -78,14 +78,19 @@ unit_Set_1_Challenge_5 =
         ("Burning 'em, if you ain't quick and nimble\n" <>
         "I go crazy when I hear a cymbal")
 
-unit_Hamming_Distance =
-  37 @=? hammingDistance "this is a test" "wokka wokka!!!"
-
-unit_Set_1_Challenge_6 = do
+test_Set_1_Challenge_6 = do
   cipherText <- concat . lines <$> readFile "data/6.txt"
 
-  Just "Terminator X: Bring the noise" @=?
-    solveKey (Base64 . T.pack $ cipherText)
+  return $ testGroup "Set 1 Challenge 6"
+    [ testCase "Hamming Distance" $
+      37 @=? hammingDistance "this is a test" "wokka wokka!!!"
+
+    , testCase "solve" $
+        Just "Terminator X: Bring the noise" @=?
+        solveKey (Base64 . T.pack $ cipherText)
+
+    ]
+
 
   where
     -- The input cypher is encrypted with repeating key XOR, then base64
