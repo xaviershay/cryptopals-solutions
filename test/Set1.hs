@@ -2,9 +2,11 @@
 
 module Set1 where
 
+import Crypto.Cipher.AES
 import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as BS
 import           Data.List            (sortOn, transpose)
-import           Data.Maybe           (fromJust, mapMaybe)
+import           Data.Maybe           (mapMaybe)
 import           Data.Monoid          ((<>))
 import qualified Data.Text.Lazy       as T
 
@@ -13,7 +15,7 @@ import Test.Tasty.HUnit
 
 import Lib
 
-focus = unit_Set_1_Challenge_4
+focus = unit_Set_1_Challenge_7
 
 test_Set_1_Challenge_1 = testGroup "Set 1 Challenge 1"
   [ testCase "simple hex2bytes" $
@@ -79,7 +81,7 @@ unit_Set_1_Challenge_5 =
         "I go crazy when I hear a cymbal")
 
 test_Set_1_Challenge_6 = do
-  cipherText <- concat . lines <$> readFile "data/6.txt"
+  bytes <- readBase64File "data/6.txt"
 
   return $ testGroup "Set 1 Challenge 6"
     [ testCase "Hamming Distance" $
@@ -87,7 +89,7 @@ test_Set_1_Challenge_6 = do
 
     , testCase "solve" $
         Just "Terminator X: Bring the noise" @=?
-        solveKey (Base64 . T.pack $ cipherText)
+        solveKey bytes
 
     ]
 
@@ -95,8 +97,8 @@ test_Set_1_Challenge_6 = do
   where
     -- The input cypher is encrypted with repeating key XOR, then base64
     -- encoded.
-    solveKey :: Base64 -> Maybe B.ByteString
-    solveKey s =
+    solveKey :: B.ByteString -> Maybe B.ByteString
+    solveKey bytes =
       -- This is an arbitrary range. In theory the key could be any length, but
       -- if it's too long there won't be enough information for each byte of
       -- the key for this method of analysis to work.
@@ -117,8 +119,6 @@ test_Set_1_Challenge_6 = do
       possibleTexts
 
       where
-        bytes = fromJust . base642bytes $ s
-
         -- Take the first arbitrary handful of blocks for the given keysize,
         -- and calculate how close they are. Smaller distance means more likely
         -- that this is the correct key size.
@@ -152,3 +152,12 @@ test_Set_1_Challenge_6 = do
           sortOn (negate . score . xorBytes bs) .
           generateSingleCharKeys $
           bs
+
+unit_Set_1_Challenge_7 = do
+  bytes <- readBase64File "data/7.txt"
+
+  let bytes' = BS.concat . B.toChunks $ bytes
+  let key = initAES ("YELLOW SUBMARINE" :: BS.ByteString)
+  let expected = "I'm back and I'm ringin' the bell"
+
+  expected @=? (BS.take (BS.length expected) $ decryptECB key bytes')

@@ -34,6 +34,13 @@ hex2bytes = hex2bytes' mempty
 
           hex2bytes' (byte:accum) (HexBytes rest)
 
+readBase64File :: String -> IO B.ByteString
+readBase64File path = do
+  encodedText <- concat . lines <$> readFile path
+
+  return . fromJust . base642bytes . Base64 . T.pack $ encodedText
+
+
 packWords :: Int -> [Int] -> Int
 packWords bitsPerWord bs =
   foldl' (\x (b, i) -> x .|. fromIntegral b `shift` (bitsPerWord * i)) 0 $
