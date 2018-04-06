@@ -157,10 +157,7 @@ chooseMostLikelyText :: [B.ByteString] -> Maybe T.Text
 chooseMostLikelyText =
   -- Decoding UTF8 can potentially fail, so we end up with a nested Maybe,
   -- which the join removes.
-  join . fmap (toMaybe . decodeUtf8') .
-
-  -- Use the first text that scores higher than an arbitrary threshold.
-  headMaybe . filter (\x -> score x >= 0.9)
+  join . fmap (toMaybe . decodeUtf8') . firstAboveThreshold score 0.9
 
 -- Generic downcasting of Either to Maybe
 toMaybe :: Either a b -> Maybe b
@@ -176,3 +173,6 @@ headMaybe (x:_) = Just x
 -- about resulting types or integer truncation.
 realDiv :: (Real a, Real b, Fractional c) => a -> b -> c
 realDiv x y = realToFrac x / realToFrac y
+
+firstAboveThreshold :: (a -> Double) -> Double -> [a] -> Maybe a
+firstAboveThreshold f t = headMaybe . filter (\x -> f x >= t)

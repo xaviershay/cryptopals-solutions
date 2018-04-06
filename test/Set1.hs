@@ -112,8 +112,8 @@ test_Set_1_Challenge_6 = do
 
       -- Return the key of the first candidate text that scores above an
       -- arbitrary threshold.
-      fmap fst . headMaybe .
-      filter (\(_, text) -> score text >= 0.9) $
+      fmap fst .
+      firstAboveThreshold (score . snd) 0.9 $
       possibleTexts
 
       where
@@ -158,13 +158,13 @@ unit_Set_1_Challenge_7 = do
   let key = initAES ("YELLOW SUBMARINE" :: BS.ByteString)
   let expected = "I'm back and I'm ringin' the bell"
 
-  expected @=? (BS.take (BS.length expected) $ decryptECB key bytes')
+  expected @=? BS.take (BS.length expected) (decryptECB key bytes')
 
 unit_Set_1_Challenge_8 = do
   candidates <- readHexStringsFile "data/8.txt"
 
   Just (fromHexString "d8806197") @=?
-    B.take 4 <$> (headMaybe . filter (\x -> scoreECB x >= 1.0) $ candidates)
+    B.take 4 <$> firstAboveThreshold scoreECB 1.0 candidates
 
   where
     -- A heuristic for how likely the input is to be ECB encoded with a 16 byte
@@ -178,6 +178,6 @@ unit_Set_1_Challenge_8 = do
 
         -- Normalize by length, then subtract 1 to remove chunks matching
         -- themselves.
-        (sum pairedChunks) `realDiv` (length chunks) - 1.0
+        sum pairedChunks `realDiv` length chunks - 1.0
 
 focus = unit_Set_1_Challenge_8
