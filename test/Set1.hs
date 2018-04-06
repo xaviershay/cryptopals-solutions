@@ -179,5 +179,3 @@ unit_Set_1_Challenge_8 = do
         -- Normalize by length, then subtract 1 to remove chunks matching
         -- themselves.
         sum pairedChunks `realDiv` length chunks - 1.0
-
-focus = unit_Set_1_Challenge_8

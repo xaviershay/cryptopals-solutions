@@ -176,3 +176,9 @@ realDiv x y = realToFrac x / realToFrac y
 
 firstAboveThreshold :: (a -> Double) -> Double -> [a] -> Maybe a
 firstAboveThreshold f t = headMaybe . filter (\x -> f x >= t)
+
+pkcs7pad :: Int -> B.ByteString -> B.ByteString
+pkcs7pad n bs =
+  let padAmount = n - fromIntegral (B.length bs) `mod` n in
+
+  bs <> B.pack (replicate padAmount . fromIntegral $ padAmount)
