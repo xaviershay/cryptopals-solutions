@@ -40,6 +40,9 @@ readBase64File path = do
 
   return . fromJust . base642bytes . Base64 . T.pack $ encodedText
 
+readHexStringsFile :: String -> IO [B.ByteString]
+readHexStringsFile path =
+  map (fromHexString . T.pack) . lines <$> readFile path
 
 packWords :: Int -> [Int] -> Int
 packWords bitsPerWord bs =

@@ -15,8 +15,6 @@ import Test.Tasty.HUnit
 
 import Lib
 
-focus = unit_Set_1_Challenge_7
-
 test_Set_1_Challenge_1 = testGroup "Set 1 Challenge 1"
   [ testCase "simple hex2bytes" $
     (Just . B.pack $ [0, 255]) @=? hex2bytes (HexBytes "00ff")
@@ -161,3 +159,25 @@ unit_Set_1_Challenge_7 = do
   let expected = "I'm back and I'm ringin' the bell"
 
   expected @=? (BS.take (BS.length expected) $ decryptECB key bytes')
+
+unit_Set_1_Challenge_8 = do
+  candidates <- readHexStringsFile "data/8.txt"
+
+  Just (fromHexString "d8806197") @=?
+    B.take 4 <$> (headMaybe . filter (\x -> scoreECB x >= 1.0) $ candidates)
+
+  where
+    -- A heuristic for how likely the input is to be ECB encoded with a 16 byte
+    -- key. Higher is more likely, 0 is no evidence.
+    scoreECB :: B.ByteString -> Double
+    scoreECB bs
+      | bs == mempty = 0
+      | otherwise    =
+        let chunks = chunksOf 16 (B.unpack bs) in
+        let pairedChunks = [1 | x <- chunks, y <- chunks, x == y] in
+
+        -- Normalize by length, then subtract 1 to remove chunks matching
+        -- themselves.
+        (sum pairedChunks) `realDiv` (length chunks) - 1.0
+
+focus = unit_Set_1_Challenge_8
